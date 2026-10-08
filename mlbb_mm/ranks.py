@@ -60,6 +60,16 @@ class Rank:
         tier = max((n for n, start in STAR_TIERS if stars >= start), key=lambda n: _STAR_START[n])
         return cls(tier, stars=stars)
 
+    @classmethod
+    def from_score(cls, score):
+        """Inverse of `score` (rounded down to a whole division / star)."""
+        steps = 0
+        for name, n in DIVISIONED_TIERS:
+            if score < steps + n:
+                return cls(name, division=n - int(max(score, 0) - steps))
+            steps += n
+        return cls.from_stars(int((score - steps) * STARS_PER_STEP))
+
     @property
     def tier_index(self):
         return TIER_NAMES.index(self.tier)

@@ -3,6 +3,7 @@ import unittest
 
 from mlbb_mm import RANKED, Matchmaker, Party, Player, Rank
 from mlbb_mm.ranks import TIER_NAMES
+from mlbb_mm.sim import SimConfig, run
 from mlbb_mm.skill import confidence, effective_skill, streak_adjustment, winrate_adjustment
 
 
@@ -61,6 +62,30 @@ class RankTests(unittest.TestCase):
             Rank("Mythic", stars=30)
         with self.assertRaises(ValueError):
             Rank("Bronze", 1)
+
+
+class RankScoreRoundTripTests(unittest.TestCase):
+    def test_from_score_inverts_score(self):
+        for tier, div in [("Warrior", 3), ("Warrior", 1), ("Master", 2), ("Epic", 5), ("Legend", 1)]:
+            r = Rank(tier, div)
+            self.assertEqual(Rank.from_score(r.score), r)
+        self.assertEqual(Rank.from_score(25).tier, "Mythic")
+        self.assertEqual(Rank.from_score(25 + 25 / 5).tier, "Mythical Honor")
+        self.assertEqual(Rank.from_score(-3), Rank("Warrior", 3))
+
+
+class SimulationTests(unittest.TestCase):
+    cfg = SimConfig(minutes=5, seed=7)
+
+    def test_same_seed_same_result(self):
+        a, b = run(RANKED, self.cfg), run(RANKED, self.cfg)
+        self.assertEqual(a.summary(), b.summary())
+
+    def test_every_player_is_accounted_for(self):
+        r = run(RANKED, self.cfg)
+        self.assertGreater(r.matches, 0)
+        self.assertEqual(r.generated, r.matched_players + r.abandoned_players + r.still_queued)
+        self.assertEqual(r.matched_players, r.matches * 10)
 
 
 class SkillTests(unittest.TestCase):
