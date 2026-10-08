@@ -84,28 +84,13 @@ def run(match_cfg=RANKED, sim_cfg=None):
     now = [0.0]
     mm = Matchmaker(match_cfg, clock=lambda: now[0])
     result = SimResult()
-    true_skill = {}     # player id -> hidden skill
-    enqueued = {}       # party -> time it joined
-    counter = [0]
-
-    def spawn(party_size):
-        leader = _true_skill(rng)
-        smurf = party_size == 1 and rng.random() < sim.smurf_rate
-        players = []
-        for i in range(party_size):
-            truth = leader if i == 0 else max(0.0, leader + rng.gauss(0, 1.5))
-            if smurf:
-                truth = min(truth + 10, 24.9)
-            counter[0] += 1
-            p = _make_player(rng, f"p{counter[0]}", truth, smurf)
-            true_skill[p.id] = truth
-            players.append(p)
-        return Party(players)
+    pop = Population(rng, sim.arrivals_per_sec, sim.smurf_rate)
+    true_skill = pop.true_skill     # player id -> hidden skill
+    enqueued = {}                   # party -> time it joined
 
     for second in range(int(sim.minutes * 60)):
         now[0] = float(second)
-        for _ in range(_poisson(rng, sim.arrivals_per_sec)):
-            party = spawn(rng.choices(PARTY_SIZES, PARTY_WEIGHTS)[0])
+        for party in pop.arrivals():
             try:
                 mm.add_to_queue(party)
             except ValueError:
@@ -129,6 +114,37 @@ def run(match_cfg=RANKED, sim_cfg=None):
 
 
 # ---- generation ----
+
+class Population:
+    """Endless supply of simulated players arriving at a steady rate."""
+
+    def __init__(self, rng, arrivals_per_sec, smurf_rate):
+        self.rng = rng
+        self.rate = arrivals_per_sec
+        self.smurf_rate = smurf_rate
+        self.true_skill = {}   # player id -> hidden skill
+        self._count = 0
+
+    def arrivals(self):
+        """The parties that join during one simulated second."""
+        return [self._spawn(self.rng.choices(PARTY_SIZES, PARTY_WEIGHTS)[0])
+                for _ in range(_poisson(self.rng, self.rate))]
+
+    def _spawn(self, party_size):
+        rng = self.rng
+        leader = _true_skill(rng)
+        smurf = party_size == 1 and rng.random() < self.smurf_rate
+        players = []
+        for i in range(party_size):
+            truth = leader if i == 0 else max(0.0, leader + rng.gauss(0, 1.5))
+            if smurf:
+                truth = min(truth + 10, 24.9)
+            self._count += 1
+            p = _make_player(rng, f"p{self._count}", truth, smurf)
+            self.true_skill[p.id] = truth
+            players.append(p)
+        return Party(players)
+
 
 def _true_skill(rng):
     if rng.random() < 0.04:                       # thin top: Mythic and above

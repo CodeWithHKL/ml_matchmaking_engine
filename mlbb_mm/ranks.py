@@ -33,6 +33,7 @@ STARS_PER_STEP = 5
 TIER_NAMES = [name for name, _ in DIVISIONED_TIERS] + [name for name, _ in STAR_TIERS]
 _DIVISIONS = dict(DIVISIONED_TIERS)
 _STAR_START = dict(STAR_TIERS)
+_ROMAN = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5}
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,31 @@ class Rank:
         """Rank for a total star count (Mythic and above)."""
         tier = max((n for n, start in STAR_TIERS if stars >= start), key=lambda n: _STAR_START[n])
         return cls(tier, stars=stars)
+
+    @classmethod
+    def parse(cls, text):
+        """'Epic III', 'epic 3', 'Mythic 12', 'glory 60', 'Mythical Immortal 130'.
+        Divisioned tiers take a division (number or roman numeral); star tiers
+        take a total star count (omit it for the tier's first star)."""
+        words = text.strip().lower().split()
+        if words and words[0] in ("honor", "glory", "immortal"):
+            words.insert(0, "mythical")
+        for name in sorted(TIER_NAMES, key=len, reverse=True):
+            n = len(name.split())
+            if words[:n] == name.lower().split():
+                rest = " ".join(words[n:])
+                break
+        else:
+            raise ValueError(f"unknown rank {text!r}; tiers: {', '.join(TIER_NAMES)}")
+        if rest in _ROMAN:
+            num = _ROMAN[rest]
+        elif rest.isdigit():
+            num = int(rest)
+        elif rest == "" and name in _STAR_START:
+            num = _STAR_START[name]
+        else:
+            raise ValueError(f"can't read {rest!r} as a division or star count")
+        return cls(name, division=num) if name in _DIVISIONS else cls(name, stars=num)
 
     @classmethod
     def from_score(cls, score):

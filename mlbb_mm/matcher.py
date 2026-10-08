@@ -118,6 +118,8 @@ class Matchmaker:
             diff, team_a = split
             all_skills = [s for t in group for s in t.player_skills]
             spread = max(all_skills) - min(all_skills)
+            if spread > window:   # candidates are each within `window` of the anchor, not of each other
+                continue
             cost = diff + cfg.spread_weight * spread
             if best is None or cost < best[0]:
                 best = (cost, diff, spread, group, team_a)

@@ -74,6 +74,21 @@ class RankScoreRoundTripTests(unittest.TestCase):
         self.assertEqual(Rank.from_score(-3), Rank("Warrior", 3))
 
 
+class RankParseTests(unittest.TestCase):
+    def test_parse_accepts_common_spellings(self):
+        self.assertEqual(Rank.parse("Epic III"), Rank("Epic", 3))
+        self.assertEqual(Rank.parse("epic 3"), Rank("Epic", 3))
+        self.assertEqual(Rank.parse("Mythic 12"), Rank("Mythic", stars=12))
+        self.assertEqual(Rank.parse("Mythical Glory 60"), Rank("Mythical Glory", stars=60))
+        self.assertEqual(Rank.parse("glory 60"), Rank("Mythical Glory", stars=60))
+        self.assertEqual(Rank.parse("Mythical Immortal"), Rank("Mythical Immortal", stars=100))
+
+    def test_parse_rejects_nonsense(self):
+        for bad in ("Bronze 2", "Epic", "Epic 9", "Mythic 40", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                Rank.parse(bad)
+
+
 class SimulationTests(unittest.TestCase):
     cfg = SimConfig(minutes=5, seed=7)
 
@@ -168,10 +183,22 @@ class MatchTests(unittest.TestCase):
 
     def test_teams_are_balanced(self):
         mm, _ = new_mm()
-        for r in (1, 2, 3, 4, 5, 1, 2, 3, 4, 5):
+        for r in (1, 2, 3, 1, 2, 3, 1, 2, 3, 2):
             mm.add_to_queue(solo(rank=Rank("Epic", r)))
         m = mm.find_match()
         self.assertLessEqual(m.skill_diff, 0.5)
+
+    def test_lobby_spread_stays_inside_the_window(self):
+        # Candidates are each within the window of the anchor, but the two
+        # extremes are 2x the window apart: they must not share a lobby.
+        mm, _ = new_mm()
+        for _ in range(4):
+            mm.add_to_queue(solo(rank=Rank("Epic", 3)))
+        for _ in range(3):
+            mm.add_to_queue(solo(rank=Rank("Epic", 3).from_score(Rank("Epic", 3).score - 3)))
+        for _ in range(3):
+            mm.add_to_queue(solo(rank=Rank.from_score(Rank("Epic", 3).score + 3)))
+        self.assertIsNone(mm.find_match())
 
     def test_huge_skill_gap_never_matches_even_after_long_wait(self):
         mm, clock = new_mm()
